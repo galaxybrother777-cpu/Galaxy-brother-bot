@@ -1,4 +1,4 @@
- import os
+import os
 import time
 import json
 from playwright.sync_api import sync_playwright
@@ -33,11 +33,9 @@ def login(page):
     """Login करने का Function"""
     print("🔑 Login कर रहा हूँ...")
     
-    # पेज पर जाएं
     page.goto("https://bdg1.cc/#/")
     page.wait_for_timeout(3000)
     
-    # ID डालें
     try:
         page.fill('input[type="text"]', YOUR_ID)
         print("✅ ID डाल दिया")
@@ -45,7 +43,6 @@ def login(page):
         print(f"❌ ID नहीं डाल पाया: {e}")
         return False
     
-    # Password डालें
     try:
         page.fill('input[type="password"]', YOUR_PASSWORD)
         print("✅ Password डाल दिया")
@@ -53,7 +50,6 @@ def login(page):
         print(f"❌ Password नहीं डाल पाया: {e}")
         return False
     
-    # Login बटन क्लिक करें
     try:
         page.click('button[type="submit"]')
         print("✅ Login बटन क्लिक किया")
@@ -61,12 +57,10 @@ def login(page):
         print(f"❌ Login बटन नहीं मिला: {e}")
         return False
     
-    # Login सफल हुआ या नहीं
     page.wait_for_timeout(5000)
     
     if "dashboard" in page.url.lower() or "home" in page.url.lower():
         print("✅ Login सफल! 🎉")
-        # Session सेव करें
         cookies = page.context.cookies()
         storage = page.evaluate("() => JSON.stringify(localStorage)")
         save_session(cookies, storage)
@@ -90,7 +84,6 @@ def load_previous_session(page):
     if session:
         try:
             page.context.add_cookies(session["cookies"])
-            # LocalStorage Load करें
             page.evaluate(f"() => {{ {session['storage']} }}")
             print("🔄 पुराना Session लोड हो गया!")
             return True
@@ -116,7 +109,6 @@ def scrape_data(page):
                     "color": cols[3] if len(cols) > 3 else "",
                 })
         
-        # पुराना Data Load करें और नया Add करें
         existing_data = []
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r") as f:
@@ -142,7 +134,6 @@ def scrape_data(page):
 def main():
     """Main Function - 24/7 चलेगा"""
     with sync_playwright() as p:
-        # 🚀 Browser Launch (Railway के लिए headless=True)
         browser = p.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-dev-shm-usage']
@@ -152,10 +143,8 @@ def main():
         )
         page = context.new_page()
         
-        # 🛡️ Stealth Mode Enable करें
         stealth_sync(page)
         
-        # 🎯 Step 1: पुराना Session Load करने की कोशिश करें
         session_loaded = load_previous_session(page)
         
         if session_loaded:
@@ -177,14 +166,12 @@ def main():
                 print("❌ Login फेल!")
                 return
         
-        # 🎯 Step 2: पहली बार Data Scrape करें
         scrape_data(page)
         
-        # 🎯 Step 3: 24/7 Loop - हर 5 मिनट में Data Scrape करें
         while True:
             try:
                 print("\n⏳ 5 मिनट बाद फिर से Data Scrape होगा...")
-                time.sleep(300)  # 5 मिनट
+                time.sleep(300)
                 
                 page.reload()
                 page.wait_for_timeout(3000)
@@ -204,4 +191,4 @@ def main():
                 time.sleep(600)
 
 if __name__ == "__main__":
-    main()
+    main() 
