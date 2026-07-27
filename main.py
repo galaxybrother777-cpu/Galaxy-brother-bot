@@ -1,8 +1,8 @@
-import os
+ import os
 import time
 import json
 from playwright.sync_api import sync_playwright
-from camoufox.sync_api import Camoufox
+from playwright_stealth import stealth_sync
 
 # 🔑 Environment Variables से ID और Password लें
 YOUR_ID = os.environ.get("BDG_ID", "your_username")
@@ -78,11 +78,8 @@ def login(page):
 def is_logged_in(page):
     """Check करें कि Login है या नहीं"""
     try:
-        # अगर URL में login या signin है तो समझें Logout हो गया
         if "login" in page.url.lower() or "signin" in page.url.lower():
             return False
-        # या कोई एलिमेंट चेक करें जो सिर्फ Logged-in Users को दिखता है
-        # Example: page.locator('.user-profile').is_visible()
         return True
     except:
         return False
@@ -92,7 +89,6 @@ def load_previous_session(page):
     session = load_session()
     if session:
         try:
-            # Cookies Load करें
             page.context.add_cookies(session["cookies"])
             # LocalStorage Load करें
             page.evaluate(f"() => {{ {session['storage']} }}")
@@ -126,7 +122,6 @@ def scrape_data(page):
             with open(DATA_FILE, "r") as f:
                 existing_data = json.load(f)
         
-        # Duplicate न आएं (Period के आधार पर)
         existing_periods = {d.get("period") for d in existing_data}
         new_data = [d for d in data if d.get("period") not in existing_periods]
         
@@ -146,23 +141,27 @@ def scrape_data(page):
 
 def main():
     """Main Function - 24/7 चलेगा"""
-    with Camoufox(
-        headless=False,  # Railway पर True करें
-        humanize=True,
-        geoip=False
-    ) as browser:
+    with sync_playwright() as p:
+        # 🚀 Browser Launch (Railway के लिए headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-dev-shm-usage']
+        )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
         
-        page = browser.new_page()
+        # 🛡️ Stealth Mode Enable करें
+        stealth_sync(page)
         
         # 🎯 Step 1: पुराना Session Load करने की कोशिश करें
         session_loaded = load_previous_session(page)
         
         if session_loaded:
-            # Session Load हो गया, अब Home Page पर जाएं
             page.goto("https://bdg1.cc/#/")
             page.wait_for_timeout(3000)
             
-            # Check करें कि Login है या नहीं
             if not is_logged_in(page):
                 print("⚠️ Session Expired हो गया है, फिर से Login कर रहा हूँ...")
                 if login(page):
@@ -173,26 +172,23 @@ def main():
             else:
                 print("✅ पुराना Session Valid है!")
         else:
-            # 🎯 Step 2: पुराना Session नहीं है, तो Login करें
             print("🆕 पहली बार Login कर रहा हूँ...")
             if not login(page):
                 print("❌ Login फेल!")
                 return
         
-        # 🎯 Step 3: अब Data Scrape करें
+        # 🎯 Step 2: पहली बार Data Scrape करें
         scrape_data(page)
         
-        # 🎯 Step 4: 24/7 Loop - हर 5 मिनट में Data Scrape करें
+        # 🎯 Step 3: 24/7 Loop - हर 5 मिनट में Data Scrape करें
         while True:
             try:
                 print("\n⏳ 5 मिनट बाद फिर से Data Scrape होगा...")
                 time.sleep(300)  # 5 मिनट
                 
-                # पेज Refresh करें
                 page.reload()
                 page.wait_for_timeout(3000)
                 
-                # Check करें कि Login है या नहीं
                 if not is_logged_in(page):
                     print("⚠️ Logout हो गया है, Auto-Relogin कर रहा हूँ...")
                     if login(page):
@@ -201,12 +197,10 @@ def main():
                         print("❌ Auto-Relogin फेल! Loop में वापस जा रहा हूँ...")
                         continue
                 
-                # Data Scrape करें
                 scrape_data(page)
                 
             except Exception as e:
                 print(f"⚠️ Loop में समस्या: {e}")
-                # अगर कोई बड़ी समस्या है, तो 10 मिनट बाद Retry करें
                 time.sleep(600)
 
 if __name__ == "__main__":
