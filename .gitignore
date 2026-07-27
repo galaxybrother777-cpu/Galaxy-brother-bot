@@ -1,14 +1,18 @@
-__pycache__/
+ __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
+*.log
 .env
+session.json
 data.json
-login_*.png
-*.html
+cookies.json
+*.png
+*.webp
+*.jpg
+*.jpeg
+*.gif
+.DS_Store
+.vscode/
+.idea/
