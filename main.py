@@ -8,6 +8,9 @@ from playwright_stealth import stealth_sync
 USER_ID = os.environ.get("BDG_ID", "your_id")
 PASSWORD = os.environ.get("BDG_PASSWORD", "your_password")
 
+# New URL
+LOGIN_URL = "https://bdg2027.com//#/login"
+
 SESSION_FILE = "session.json"
 DATA_FILE = "data.json"
 
@@ -23,32 +26,129 @@ def load_session():
     return None
 
 def login(page):
-    print("🔑 Logging in...")
-    page.goto("https://bdg1.cc/#/")
-    page.wait_for_timeout(3000)
-
+    print(f"🔑 Logging in to {LOGIN_URL}...")
+    
     try:
-        page.fill('input[type="text"]', USER_ID)
-        page.fill('input[type="password"]', PASSWORD)
-        page.click('button[type="submit"]')
-        print("✅ Login form submitted")
+        # Website pe jao
+        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+        print("✅ Page loaded")
+        
+        # Thoda wait karo
+        page.wait_for_timeout(5000)
+        
+        # Page ka title check karo
+        print(f"📄 Page title: {page.title()}")
+        print(f"📄 Current URL: {page.url}")
+        
+        # 🎯 Selectors try karo (multiple options)
+        selectors_id = [
+            'input[type="text"]',
+            'input[name="username"]',
+            'input[name="user"]',
+            'input[id="username"]',
+            'input[id="user"]',
+            'input[placeholder*="ID"]',
+            'input[placeholder*="User"]',
+            'input[placeholder*="user"]'
+        ]
+        
+        selectors_pass = [
+            'input[type="password"]',
+            'input[name="password"]',
+            'input[name="pass"]',
+            'input[id="password"]',
+            'input[id="pass"]',
+            'input[placeholder*="Password"]',
+            'input[placeholder*="password"]'
+        ]
+        
+        selectors_submit = [
+            'button[type="submit"]',
+            'button:has-text("Login")',
+            'button:has-text("Sign In")',
+            'button:has-text("Submit")',
+            'button:has-text("log in")'
+        ]
+        
+        # ID fill karo
+        id_filled = False
+        for selector in selectors_id:
+            try:
+                if page.locator(selector).count() > 0:
+                    page.fill(selector, USER_ID)
+                    print(f"✅ ID filled using: {selector}")
+                    id_filled = True
+                    break
+            except:
+                continue
+        
+        if not id_filled:
+            print("❌ Could not find ID field")
+            page.screenshot(path="login_error.png")
+            print("📸 Screenshot saved as login_error.png")
+            return False
+        
+        # Password fill karo
+        pass_filled = False
+        for selector in selectors_pass:
+            try:
+                if page.locator(selector).count() > 0:
+                    page.fill(selector, PASSWORD)
+                    print(f"✅ Password filled using: {selector}")
+                    pass_filled = True
+                    break
+            except:
+                continue
+        
+        if not pass_filled:
+            print("❌ Could not find Password field")
+            return False
+        
+        # Submit button click karo
+        submitted = False
+        for selector in selectors_submit:
+            try:
+                if page.locator(selector).count() > 0:
+                    page.click(selector)
+                    print(f"✅ Submitted using: {selector}")
+                    submitted = True
+                    break
+            except:
+                continue
+        
+        if not submitted:
+            print("❌ Could not find Submit button")
+            return False
+        
+        # Wait for navigation
+        page.wait_for_timeout(5000)
+        
+        # Check karo login hua ya nahi
+        if "dashboard" in page.url.lower() or "home" in page.url.lower():
+            print("✅ Login successful!")
+            cookies = page.context.cookies()
+            storage = page.evaluate("() => JSON.stringify(localStorage)")
+            save_session(cookies, storage)
+            return True
+        else:
+            print(f"❌ Login failed! URL: {page.url}")
+            page.screenshot(path="login_failed.png")
+            return False
+            
     except Exception as e:
         print(f"❌ Login error: {e}")
-        return False
-
-    page.wait_for_timeout(5000)
-    if "dashboard" in page.url.lower() or "home" in page.url.lower():
-        print("✅ Login successful!")
-        cookies = page.context.cookies()
-        storage = page.evaluate("() => JSON.stringify(localStorage)")
-        save_session(cookies, storage)
-        return True
-    else:
-        print(f"❌ Login failed! URL: {page.url}")
+        try:
+            page.screenshot(path="login_error.png")
+            print("📸 Screenshot saved as login_error.png")
+        except:
+            pass
         return False
 
 def is_logged_in(page):
-    return "login" not in page.url.lower() and "signin" not in page.url.lower()
+    try:
+        return "login" not in page.url.lower() and "signin" not in page.url.lower()
+    except:
+        return False
 
 def load_previous_session(page):
     session = load_session()
@@ -65,6 +165,8 @@ def load_previous_session(page):
 def scrape_data(page):
     print("📊 Scraping data...")
     try:
+        page.wait_for_selector('table', timeout=10000)
+        
         rows = page.locator('table tbody tr').all()
         data = []
         for row in rows:
@@ -104,18 +206,20 @@ def main():
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu"
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled"
             ]
         )
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
         )
         page = context.new_page()
 
         try:
             stealth_sync(page)
         except:
-            print("⚠️ Stealth mode not available, continuing...")
+            print("⚠️ Stealth mode not available")
 
         if not load_previous_session(page):
             print("🆕 No session found, logging in...")
@@ -123,7 +227,7 @@ def main():
                 print("❌ Login failed, exiting...")
                 return
 
-        page.goto("https://bdg1.cc/#/")
+        page.goto(LOGIN_URL)
         page.wait_for_timeout(3000)
 
         if not is_logged_in(page):
