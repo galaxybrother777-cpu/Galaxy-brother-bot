@@ -4,98 +4,66 @@ import json
 from playwright.sync_api import sync_playwright
 from playwright_stealth import stealth_sync
 
-# 🔑 Environment Variables से ID और Password लें
-YOUR_ID = os.environ.get("BDG_ID", "your_username")
-YOUR_PASSWORD = os.environ.get("BDG_PASSWORD", "your_password")
+# Environment Variables
+USER_ID = os.environ.get("BDG_ID", "your_id")
+PASSWORD = os.environ.get("BDG_PASSWORD", "your_password")
 
-# 📁 Session और Data Store करने के लिए Files
 SESSION_FILE = "session.json"
 DATA_FILE = "data.json"
 
 def save_session(cookies, storage):
-    """Session (Cookies + LocalStorage) को सेव करें"""
-    session_data = {
-        "cookies": cookies,
-        "storage": storage
-    }
     with open(SESSION_FILE, "w") as f:
-        json.dump(session_data, f, indent=2)
-    print("💾 Session सेव हो गया!")
+        json.dump({"cookies": cookies, "storage": storage}, f, indent=2)
+    print("💾 Session saved!")
 
 def load_session():
-    """पुराना Session लोड करें (अगर मौजूद है)"""
     if os.path.exists(SESSION_FILE):
         with open(SESSION_FILE, "r") as f:
             return json.load(f)
     return None
 
 def login(page):
-    """Login करने का Function"""
-    print("🔑 Login कर रहा हूँ...")
-    
+    print("🔑 Logging in...")
     page.goto("https://bdg1.cc/#/")
     page.wait_for_timeout(3000)
-    
+
     try:
-        page.fill('input[type="text"]', YOUR_ID)
-        print("✅ ID डाल दिया")
-    except Exception as e:
-        print(f"❌ ID नहीं डाल पाया: {e}")
-        return False
-    
-    try:
-        page.fill('input[type="password"]', YOUR_PASSWORD)
-        print("✅ Password डाल दिया")
-    except Exception as e:
-        print(f"❌ Password नहीं डाल पाया: {e}")
-        return False
-    
-    try:
+        page.fill('input[type="text"]', USER_ID)
+        page.fill('input[type="password"]', PASSWORD)
         page.click('button[type="submit"]')
-        print("✅ Login बटन क्लिक किया")
+        print("✅ Login form submitted")
     except Exception as e:
-        print(f"❌ Login बटन नहीं मिला: {e}")
+        print(f"❌ Login error: {e}")
         return False
-    
+
     page.wait_for_timeout(5000)
-    
     if "dashboard" in page.url.lower() or "home" in page.url.lower():
-        print("✅ Login सफल! 🎉")
+        print("✅ Login successful!")
         cookies = page.context.cookies()
         storage = page.evaluate("() => JSON.stringify(localStorage)")
         save_session(cookies, storage)
         return True
     else:
-        print(f"❌ Login फेल! URL: {page.url}")
+        print(f"❌ Login failed! URL: {page.url}")
         return False
 
 def is_logged_in(page):
-    """Check करें कि Login है या नहीं"""
-    try:
-        if "login" in page.url.lower() or "signin" in page.url.lower():
-            return False
-        return True
-    except:
-        return False
+    return "login" not in page.url.lower() and "signin" not in page.url.lower()
 
 def load_previous_session(page):
-    """पुराना Session Load करें (Cookies + Storage)"""
     session = load_session()
     if session:
         try:
             page.context.add_cookies(session["cookies"])
             page.evaluate(f"() => {{ {session['storage']} }}")
-            print("🔄 पुराना Session लोड हो गया!")
+            print("🔄 Previous session loaded!")
             return True
         except Exception as e:
-            print(f"⚠️ Session Load करने में समस्या: {e}")
-            return False
+            print(f"⚠️ Session load error: {e}")
     return False
 
 def scrape_data(page):
-    """Data निकालें और Store करें"""
-    print("📊 डेटा निकाल रहा हूँ...")
-    
+    print("📊 Scraping data...")
     try:
         rows = page.locator('table tbody tr').all()
         data = []
@@ -108,87 +76,80 @@ def scrape_data(page):
                     "big_small": cols[2] if len(cols) > 2 else "",
                     "color": cols[3] if len(cols) > 3 else "",
                 })
-        
-        existing_data = []
+
+        existing = []
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r") as f:
-                existing_data = json.load(f)
-        
-        existing_periods = {d.get("period") for d in existing_data}
+                existing = json.load(f)
+
+        existing_periods = {d.get("period") for d in existing}
         new_data = [d for d in data if d.get("period") not in existing_periods]
-        
+
         if new_data:
-            existing_data.extend(new_data)
+            existing.extend(new_data)
             with open(DATA_FILE, "w") as f:
-                json.dump(existing_data, f, indent=2)
-            print(f"✅ {len(new_data)} नए रिकॉर्ड सेव हो गए!")
+                json.dump(existing, f, indent=2)
+            print(f"✅ {len(new_data)} new records saved!")
         else:
-            print("ℹ️ कोई नया डेटा नहीं मिला")
-        
-        return data
-        
+            print("ℹ️ No new data")
     except Exception as e:
-        print(f"❌ डेटा निकालते समय समस्या: {e}")
-        return []
+        print(f"❌ Scraping error: {e}")
 
 def main():
-    """Main Function - 24/7 चलेगा"""
+    print("🚀 Bot starting...")
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ]
         )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = context.new_page()
-        
-        stealth_sync(page)
-        
-        session_loaded = load_previous_session(page)
-        
-        if session_loaded:
-            page.goto("https://bdg1.cc/#/")
-            page.wait_for_timeout(3000)
-            
-            if not is_logged_in(page):
-                print("⚠️ Session Expired हो गया है, फिर से Login कर रहा हूँ...")
-                if login(page):
-                    print("✅ Auto-Relogin सफल!")
-                else:
-                    print("❌ Auto-Relogin फेल!")
-                    return
-            else:
-                print("✅ पुराना Session Valid है!")
-        else:
-            print("🆕 पहली बार Login कर रहा हूँ...")
+
+        try:
+            stealth_sync(page)
+        except:
+            print("⚠️ Stealth mode not available, continuing...")
+
+        if not load_previous_session(page):
+            print("🆕 No session found, logging in...")
             if not login(page):
-                print("❌ Login फेल!")
+                print("❌ Login failed, exiting...")
                 return
-        
-        scrape_data(page)
-        
+
+        page.goto("https://bdg1.cc/#/")
+        page.wait_for_timeout(3000)
+
+        if not is_logged_in(page):
+            print("⚠️ Session expired, re-logging...")
+            if not login(page):
+                print("❌ Re-login failed, exiting...")
+                return
+
+        print("✅ Bot ready, starting main loop...")
         while True:
             try:
-                print("\n⏳ 5 मिनट बाद फिर से Data Scrape होगा...")
+                scrape_data(page)
+                print("⏳ Waiting 5 minutes...")
                 time.sleep(300)
-                
                 page.reload()
                 page.wait_for_timeout(3000)
-                
+
                 if not is_logged_in(page):
-                    print("⚠️ Logout हो गया है, Auto-Relogin कर रहा हूँ...")
-                    if login(page):
-                        print("✅ Auto-Relogin सफल!")
-                    else:
-                        print("❌ Auto-Relogin फेल! Loop में वापस जा रहा हूँ...")
+                    print("⚠️ Logged out, re-logging...")
+                    if not login(page):
+                        print("❌ Re-login failed, retrying in 10 minutes...")
+                        time.sleep(600)
                         continue
-                
-                scrape_data(page)
-                
             except Exception as e:
-                print(f"⚠️ Loop में समस्या: {e}")
+                print(f"⚠️ Loop error: {e}")
                 time.sleep(600)
 
 if __name__ == "__main__":
-    main() 
+    main()
