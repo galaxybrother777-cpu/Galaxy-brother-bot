@@ -1,12 +1,10 @@
 {
-  "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "DOCKERFILE"
+    "builder": "NIXPACKS",
+    "buildCommand": "pip install -r requirements.txt && playwright install chromium && playwright install-deps"
   },
   "deploy": {
-    "numReplicas": 1,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "sleepApplication": false
+    "startCommand": "python main.py",
+    "restartPolicyType": "ON_FAILURE"
   }
-} 
+}
